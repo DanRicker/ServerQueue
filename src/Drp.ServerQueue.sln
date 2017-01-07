@@ -29,12 +29,12 @@ Global
 		SccNumberOfProjects = 3
 		SccEnterpriseProvider = {4CA58AB2-18FA-4F8D-95D4-32DDF27D184C}
 		SccTeamFoundationServer = https://peoplutions.visualstudio.com/defaultcollection
-		SccProjectUniqueName0 = Drp.ServerQueue\\Drp.ServerQueue.csproj
-		SccProjectName0 = Drp.ServerQueue
-		SccLocalPath0 = Drp.ServerQueue
-		SccProjectUniqueName1 = DrpServerQueueUser\\DrpServerQueueUser.csproj
-		SccProjectName1 = DrpServerQueueUser
-		SccLocalPath1 = DrpServerQueueUser
-		SccLocalPath2 = .
+		SccLocalPath0 = .
+		SccProjectUniqueName1 = Drp.ServerQueue\\Drp.ServerQueue.csproj
+		SccProjectName1 = Drp.ServerQueue
+		SccLocalPath1 = Drp.ServerQueue
+		SccProjectUniqueName2 = DrpServerQueueUser\\DrpServerQueueUser.csproj
+		SccProjectName2 = DrpServerQueueUser
+		SccLocalPath2 = DrpServerQueueUser
 	EndGlobalSection
 EndGlobal

@@ -72,10 +72,10 @@
     <Compile Include="Models\DrpServerQueueStateEntry.cs" />
     <Compile Include="Models\DrpServerQueueTimeout.cs" />
     <Compile Include="Models\IDrpServerQueueStateEntry.cs" />
-    <Compile Include="Properties\Settings.Designer.cs">
+    <Compile Include="Properties\DrpServerQueue.Designer.cs">
       <AutoGen>True</AutoGen>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>DrpServerQueue.resx</DependentUpon>
     </Compile>
     <Compile Include="ServerQueueAdministration.cs" />
     <Compile Include="ServerQueueDataContext.cs" />
@@ -88,19 +88,32 @@
     <Compile Include="Types\DrpApplicationLogLevel.cs" />
     <Compile Include="Types\DrpApplicationLogEntry.cs" />
     <Compile Include="Types\IDrpApplicationLogEntry.cs" />
+    <Compile Include="Types\IDrpQueueConfiguration.cs" />
     <Compile Include="Types\IDrpQueueItem.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="App.config">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
     <None Include="packages.config" />
-    <None Include="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Content Include="SQLFiles\ActiveAndHistory_ItemTypeCounts.sql" />
+    <Content Include="SQLFiles\AttachDatabase.sql" />
+    <Content Include="SQLFiles\QueueStatusTableCounts.sql" />
+    <Content Include="SQLFiles\spQueueItemAcquireSpecific.sql" />
+    <Content Include="SQLFiles\spQueueItemAcquire.sql" />
+    <Content Include="SQLFiles\spQueueItemDequeue.sql" />
+    <Content Include="SQLFiles\spQueueItemEnqueue.sql" />
+    <Content Include="SQLFiles\spQueueItemRelease.sql" />
+    <Content Include="SQLFiles\TroubleShootEnqueue.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Properties\DrpServerQueue.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>DrpServerQueue.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Migrations\" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

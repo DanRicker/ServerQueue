@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 namespace Drp
 {
@@ -42,7 +42,7 @@ namespace Drp
 
             try
             {
-                DrpDebugging.DebugWriteLine(source, logText);
+                DrpDebugging.DebugWriteLine(string.Format("{0} - {1}", source, logText));
             }
 #pragma warning disable CS0168 // Variable is declared but never used
             catch (System.OutOfMemoryException memEx)

@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
 namespace Drp
@@ -27,7 +27,7 @@ namespace Drp
         public static void WriteLogEntry(IDrpApplicationLogEntry drpLogEntry)
         {
             // Check logging level to determine if write is to be done
-            if(false == drpLogEntry.LogLevel.WriteThisLogEntry(ApplicationLogLevel))
+            if(false == drpLogEntry.LogLevel.WriteThisLogEntry(DrpLogging.ApplicationLogLevel))
             {
                 return;
             }

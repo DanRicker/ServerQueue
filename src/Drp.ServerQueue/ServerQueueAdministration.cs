@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
 namespace Drp
@@ -9,23 +9,18 @@ namespace Drp
 
     using System;
     using System.Collections.Generic;
-    using System.Linq;
-    using System.Text;
-    using System.Threading.Tasks;
-
-    using Drp;
-    using Drp.Types;
-    using Drp.SeverQueueData;
-    using SeverQueueData.Models;
 
     #endregion
 
     /// <summary>
     /// Exposed Server Queue Administrative views and tasks
     /// </summary>
-    public class ServerQueueAdministration: ServerQueue, IServerQueue, IServerQueueAdministation
+    public class ServerQueueAdministration: ServerQueueState, IServerQueue, IServerQueueState, IServerQueueAdministation
     {
-
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="connectionString">Database connection string</param>
         public ServerQueueAdministration(string connectionString)
             :base(connectionString)
         { }

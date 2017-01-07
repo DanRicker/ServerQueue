@@ -1,8 +1,8 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
-namespace Drp.SeverQueueData.DAL
+namespace Drp.ServerQueueData.DAL
 {
 
     #region Using Statements
@@ -14,10 +14,9 @@ namespace Drp.SeverQueueData.DAL
     using System.Data.Entity.ModelConfiguration.Conventions;
 
     using Drp;
-    using Drp.SeverQueueData.Models;
+    using Drp.ServerQueueData.Models;
     using Drp.Types;
-
-    using AppSettings = Drp.Properties.Settings;
+    using System.Data.SqlClient;
 
     #endregion
 
@@ -33,14 +32,30 @@ namespace Drp.SeverQueueData.DAL
 
         #region Static Methods and Fields
 
-        public static readonly string DefaultConnectionString = AppSettings.Default.DefaultConnectionString;
+        /// <summary>
+        /// Returns array of SQL SQL Statements to be run as part of database creation.
+        /// </summary>
+        /// <returns>IEnumerable of string</returns>
+        private static IEnumerable<string> GetDatabaseBuildSqlExecutables()
+        {
+            return new string[]
+            {
+                // Currently Just Create Procedure Statements but could easily be others.
+                Drp.Properties.DrpServerQueue.spQueueItemAcquire,
+                Drp.Properties.DrpServerQueue.spQueueItemAcquireSpecific,
+                Drp.Properties.DrpServerQueue.spQueueItemEnqueue,
+                Drp.Properties.DrpServerQueue.spQueueItemRelease,
+                Drp.Properties.DrpServerQueue.spQueueItemDequeue,
+            };
+        }
 
         /// <summary>
-        /// TODO: Config setting
+        /// Number of times to try to acquire an item before returning failure
         /// </summary>
         /// <returns></returns>
         public static int GetAcquireRetryAttempts()
         {
+            // TODO: Make dynamic and add config setting
             return 10;
         }
 
@@ -62,25 +77,9 @@ namespace Drp.SeverQueueData.DAL
         /// <param name="connString">Optional. If null or blank then will use internal default 
         ///         connection string to local sqlExpress server.</param>
         /// <returns></returns>
-        internal static DrpServerQueueDataContext NewDrpServerQueueDataContext(string connString = null)
+        internal static DrpServerQueueDataContext NewDrpServerQueueDataContext(string connString)
         {
-            return new DrpServerQueueDataContext(EnsureConnectionString(connString));
-        }
-
-        /// <summary>
-        /// Get the connections string to use for new instance creation. If connection string argument is blank
-        /// returns the defauilt connection string
-        /// </summary>
-        /// <param name="connectionStringArg">Connection string argument</param>
-        /// <returns>connection string to use for the new instance</returns>
-        private static string EnsureConnectionString(string connectionStringArg)
-        {
-            string ret = connectionStringArg;
-            if (string.IsNullOrWhiteSpace(ret))
-            {
-                ret = DrpServerQueueDataContext.DefaultConnectionString;
-            }
-
+            DrpServerQueueDataContext ret = new DrpServerQueueDataContext(connString);
             return ret;
         }
 
@@ -88,7 +87,9 @@ namespace Drp.SeverQueueData.DAL
 
         #region Database Tables
 
-
+        /// <summary>
+        /// The Queue Item Tables (Active and History)
+        /// </summary>
         public DbSet<DrpServerQueueItem> ServerQueueItems { get; set; }
         public DbSet<DrpServerQueueHistoryItem> ServerQueueHistoryItems { get; set; }
 
@@ -97,7 +98,7 @@ namespace Drp.SeverQueueData.DAL
         /// Three Tables to hold the queue items in the 3 states.
         ///     - ServerQueueItems: Items added to the queue
         ///     - ServerQueueAquiredItems: Items that have been acquired
-        ///     - ServerQueueHistoryItems: History table of queue items that have passed through this queue
+        ///     - ServerQueueDequeuedItems: History table of queue items that have passed through this queue
         /// </summary>
         public DbSet<DrpServerQueueEnqueuedItem> ServerQueueEnqueuedItems { get; set; }
         public DbSet<DrpServerQueueAcquiredItem> ServerQueueAcquiredItems { get; set; }
@@ -108,7 +109,9 @@ namespace Drp.SeverQueueData.DAL
         /// </summary>
         public DbSet<DrpServerQueueLogEntry> ServerQueueLogs { get; set; }
 
-
+        /// <summary>
+        /// TODO: Build out the timeout processing
+        /// </summary>
         public DbSet<DrpServerQueueTimeout> ServerQueueTimeout { get; set; }
 
         #endregion
@@ -134,7 +137,7 @@ namespace Drp.SeverQueueData.DAL
                 {
                     // Don't want logging failures to crash the service.
                     transaction.Rollback();
-                    WriteAppLogEntry(
+                    this.WriteAppLogEntry(
                         "DrpServerQueueDataContext.WriteQueueLogEntry",
                         "Exception Writing to Queue Log in Database",
                         ex);
@@ -196,25 +199,6 @@ namespace Drp.SeverQueueData.DAL
         }
 
         /// <summary>
-        /// Validate AcquirerId value. Currently only not blank
-        /// </summary>
-        /// <param name="acquirerId">value to validate</param>
-        /// <param name="action">Queue Action wanting validation</param>
-        /// <param name="queueItemId">queueItemId of queue item being acted on</param>
-        /// <returns>True if the acquirerId value is valid, otherwise false</returns>
-        private bool ValidateAquireId(string acquirerId, string action, Guid queueItemId)
-        {
-            bool ret = (false == string.IsNullOrWhiteSpace(acquirerId));
-            if (false == ret)
-            {
-                WriteAppLogEntry(
-                    string.Format("[{0}].[Failure]", action),
-                    string.Format("[aquirerId is invalid: queueItemId: {0}]", queueItemId.ToStringOuterBraces()));
-            }
-            return ret;
-        }
-
-        /// <summary>
         /// Override OnModelCreating to complete mapping
         ///  - Inherited Properties need to be explicitly mapped
         /// </summary>
@@ -223,27 +207,27 @@ namespace Drp.SeverQueueData.DAL
         {
             modelBuilder.Conventions.Remove<PluralizingTableNameConvention>();
 
-            // -- Not sure why this is not needed now. They all inherit now..
-            //modelBuilder.Entity<DrpServerQueueAcquiredItem>().Map(m =>
-            //{
-            //    m.MapInheritedProperties();
-            //    m.ToTable("ServerQueueAquiredItem");
-            //});
-
-            //modelBuilder.Entity<DrpServerQueueDequeuedItem>().Map(m =>
-            //{
-            //    m.MapInheritedProperties();
-            //    m.ToTable("ServerQueueDequeuedItem");
-            //});
-
-            //modelBuilder.Entity<DrpServerQueueHistoryItem>().Map(m =>
-            //{
-            //    m.MapInheritedProperties();
-            //    m.ToTable("ServerQueueHistoryItem");
-            //});
-
             base.OnModelCreating(modelBuilder);
         }
+
+
+        /// <summary>
+        /// Create the Server Queue Stored Procedures.
+        /// Load "Create" text from included SQL Command file. Executes the Create Proc against the database.
+        /// </summary>
+        private void CreateStoredProcedures()
+        {
+            if (null == this.Database)
+            {
+                throw new InvalidOperationException("Create Stored Procedure Failed. Database is null");
+            }
+
+            foreach(string createSprocText in GetDatabaseBuildSqlExecutables())
+            {
+                this.Database.ExecuteSqlCommand(createSprocText);
+            }
+        }
+
 
         #endregion
 
@@ -258,8 +242,12 @@ namespace Drp.SeverQueueData.DAL
         {
             // Initialize Configuration
             this.Configuration.AutoDetectChangesEnabled = true;
+
+            // The stored procedures for Queue Operations use Transactions.
+            // Don't need transactions around transactions here and nothing else should need it.
             this.Configuration.EnsureTransactionsForFunctionsAndCommands = true;
-            this.Configuration.LazyLoadingEnabled = false;
+
+            this.Configuration.LazyLoadingEnabled = true;
             this.Configuration.ProxyCreationEnabled = true;
             this.Configuration.ValidateOnSaveEnabled = true;
 
@@ -267,17 +255,9 @@ namespace Drp.SeverQueueData.DAL
             Database.SetInitializer<DrpServerQueueDataContext>(new CreateDatabaseIfNotExists<DrpServerQueueDataContext>());
             if (this.Database.CreateIfNotExists())
             {
-                WriteAppLogEntry(
-                    "DrpServerQueueDataContext_ctor",
-                    string.Format("Success - Database initialized using connection string: {0}", connectionString));
+                // On Create, need to also create the stored procedures.
+                this.CreateStoredProcedures();
             }
-            else
-            {
-                WriteAppLogEntry(
-                    "DrpServerQueueDataContext_ctor",
-                    string.Format("Success (Database Existed) - Database initialized using connection string: {0}", connectionString));
-            }
-
 
             // Queue operations are done in a transaction.
             // Use "force == true"
@@ -287,6 +267,7 @@ namespace Drp.SeverQueueData.DAL
             //      where doing so lazily will cause issues, such as when the operation
             //      is part of a transaction.
             this.Database.Initialize(true);
+
         }
 
 
@@ -320,7 +301,7 @@ namespace Drp.SeverQueueData.DAL
             {
                 if (null != ServerQueueEnqueuedItems)
                 {
-                    return ServerQueueEnqueuedItems.Count();
+                    return ServerQueueEnqueuedItems.AsNoTracking().Count();
                 }
                 return 0;
             }
@@ -336,7 +317,7 @@ namespace Drp.SeverQueueData.DAL
             {
                 if (null != ServerQueueAcquiredItems)
                 {
-                    return ServerQueueAcquiredItems.Count();
+                    return ServerQueueAcquiredItems.AsNoTracking().Count();
                 }
                 return 0;
             }
@@ -373,7 +354,7 @@ namespace Drp.SeverQueueData.DAL
             }
             else if (null != this.ServerQueueEnqueuedItems)
             {
-                return this.ServerQueueEnqueuedItems.Where(sqi => sqi.ItemType.Equals(itemType, StringComparison.Ordinal)).Count();
+                return this.ServerQueueEnqueuedItems.AsNoTracking().Where(sqi => sqi.ItemType.Equals(itemType, StringComparison.Ordinal)).Count();
             }
             return 0;
         }
@@ -391,7 +372,7 @@ namespace Drp.SeverQueueData.DAL
             }
             else if (null != this.ServerQueueAcquiredItems)
             {
-                return this.ServerQueueAcquiredItems.Where(sqi => sqi.ItemType.Equals(itemType, StringComparison.Ordinal)).Count();
+                return this.ServerQueueAcquiredItems.AsNoTracking().Where(sqi => sqi.ItemType.Equals(itemType, StringComparison.Ordinal)).Count();
             }
             return 0;
         }
@@ -409,45 +390,83 @@ namespace Drp.SeverQueueData.DAL
         public IDrpQueueItem Enqueue(string type, string dataId, string data, string metadata)
         {
             DrpServerQueueItem ret = null;
-            using (DbContextTransaction transaction = this.Database.BeginTransaction())
+            Guid queueStateId = Guid.Empty;
+
+            /*
+
+            CREATE PROCEDURE [dbo].[spQueueItemEnqueue]
+                @itemId NVARCHAR(255) = NULL,
+                @itemType NVARCHAR(255) = NULL,
+                @itemData NVARCHAR(MAX),
+                @itemMetadata NVARCHAR(MAX)
+
+            */
+
+            using (SqlCommand sqlCommand = new SqlCommand(
+                "exec dbo.spQueueItemEnqueue @itemId, @itemType, @itemData, @itemMetadata"))
             {
+
+                sqlCommand.Connection = (SqlConnection)this.Database.Connection;
+                if (sqlCommand.Connection.State != System.Data.ConnectionState.Open)
+                {
+                    sqlCommand.Connection.Open();
+                }
+
+                sqlCommand.Parameters.AddWithValue("@itemId", dataId);
+                sqlCommand.Parameters.AddWithValue("@itemType", type);
+                sqlCommand.Parameters.AddWithValue("@itemData", data);
+                sqlCommand.Parameters.AddWithValue("@itemMetadata", metadata);
+
                 try
                 {
-                    Guid queueItemId = Guid.NewGuid();
-
-                    // Constructor handles MaxLength values for type and dataId
-                    ret = new DrpServerQueueItem(type, dataId, data, metadata)
-                    { Id = queueItemId };
-
-                    DrpServerQueueEnqueuedItem queueItem = new DrpServerQueueEnqueuedItem()
+                    // If nothing returned, then Enqueue failed
+                    using (SqlDataReader sqlreader = sqlCommand.ExecuteReader())
                     {
-                        Id = Guid.NewGuid(),
-                        ItemType = ret.ItemType, // if truncated get what is saved
-                        QueueItemId = queueItemId,
-                        Created = DateTimeOffset.UtcNow
-                    };
-                    this.ServerQueueItems.Add(ret);
-                    this.ServerQueueEnqueuedItems.Add(queueItem);
-                    this.SaveChanges();
-                    transaction.Commit();
+                        while(sqlreader.Read())
+                        {
+                            queueStateId = (Guid)sqlreader["Id"];
+                            // Don't make a DB Call for the actual QueueItem object.
+                            // The only missing information is the Id (QueueItemId) and that was just retrieved
+                            ret = new DrpServerQueueItem()
+                            {
+                                Id = (Guid)sqlreader["QueueItemId"],
+                                ItemType = type,
+                                ItemData = data,
+                                ItemId = dataId,
+                                ItemMetadata = metadata
+                            };
+                            // There should only be one but just in case... exit here
+                            break;
+                        }
 
-                    this.WriteQueueLogEntry(
-                        Guid.Empty,
-                        queueItem.Id,
-                        ret.Id,
-                        "[Enqueue].[Success]",
-                        string.Format("[Enqueue Id: {0} Item [type: {1}, dataId: {2}]", ret.Id, type, dataId));
+                        if (sqlreader.Read())
+                        {
+                            this.WriteAppLogEntry(
+                                "[Enqueue].[Issue]",
+                                string.Format("sqlReader return more than one row: [@itemId: {0},  @itemType: {1}]", dataId, type));
+                        }
+                    }
 
                 }
                 catch (System.Exception ex)
                 {
-                    transaction.Rollback();
                     this.WriteAppLogEntry(
                         "[Enqueue].[Failure]",
-                        string.Format("[RolledBack Item [type: {1}, dataId: {2}]]", type, dataId),
+                        string.Format("[@itemId: {0},  @itemType: {1}]", dataId, type),
                         ex);
-                    Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Enqueue", ex);
+                    ret = null;
                 }
+            }
+
+            if (null != ret)
+            {
+                this.WriteQueueLogEntry(
+                    Guid.Empty,
+                    queueStateId,
+                    ret.Id,
+                    "[Enqueue].[Success]",
+                    string.Format("[Enqueue Id: {0} Item [type: {1}, dataId: {2}]", ret.Id, type, dataId));
+
             }
 
             return ret;
@@ -465,7 +484,7 @@ namespace Drp.SeverQueueData.DAL
             {
                 Guid queueItemId = Guid.Empty;
 
-                enqueuedItem = this.ServerQueueEnqueuedItems.OrderBy(sqi => sqi.Created).FirstOrDefault();
+                enqueuedItem = this.ServerQueueItemsQueueOrder.FirstOrDefault();
 
                 if (null != enqueuedItem)
                 {
@@ -500,10 +519,10 @@ namespace Drp.SeverQueueData.DAL
             {
                 try
                 {
-                    enqueuedItem = this.ServerQueueEnqueuedItems.Where(sqi =>
+                    enqueuedItem = this.ServerQueueItemsQueueOrder.Where(sqi =>
                         sqi.ItemType.Equals(itemType,
                         StringComparison.InvariantCultureIgnoreCase
-                        )).OrderBy(sqi => sqi.Created).FirstOrDefault();
+                        )).FirstOrDefault();
 
                     if (null != enqueuedItem)
                     {
@@ -535,8 +554,8 @@ namespace Drp.SeverQueueData.DAL
             IDrpQueueItem ret = null;
             try
             {
-                enqueuedItem = this.ServerQueueEnqueuedItems.Where(sqi =>
-                    sqi.QueueItemId.Equals(queueItemId)).OrderBy(sqi => sqi.Created).FirstOrDefault();
+                enqueuedItem = this.ServerQueueItemsQueueOrder.Where(sqi =>
+                    sqi.QueueItemId.Equals(queueItemId)).FirstOrDefault();
 
                 if (null != enqueuedItem)
                 {
@@ -566,7 +585,7 @@ namespace Drp.SeverQueueData.DAL
             IDrpQueueItem queueItem = null;
             try
             {
-                queueItem = this.ServerQueueItems.Where(
+                queueItem = this.ServerQueueItems.AsNoTracking().Where(
                     sqi => itemId.Equals(sqi.ItemId, StringComparison.OrdinalIgnoreCase)
                     ).OrderBy(sqi => sqi.Created).FirstOrDefault();
             }
@@ -586,226 +605,67 @@ namespace Drp.SeverQueueData.DAL
         #region Acquire Private Methods
 
         /// <summary>
-        /// Retrieved the actual QueueItem for an Acquired Item entry
-        /// Context save is a SaveChangesAsync(). The updated Entries are lower priority than
-        ///     the actual Queue Processing
+        /// Return ServerQueueItems in Queue Order (first in first out)
         /// </summary>
-        /// <param name="acquiredItem">Owner of the Queue Item</param>
-        /// <returns>the retrieved QueueItem marked as acquired and saved to DB</returns>
-        private IDrpQueueItem SetQueueItemAcquired(DrpServerQueueAcquiredItem acquiredItem)
+        private IOrderedQueryable<DrpServerQueueEnqueuedItem> ServerQueueItemsQueueOrder
         {
-            DrpServerQueueItem queueItem = null;
-            if(null != acquiredItem && false == acquiredItem.QueueItemId.Equals(Guid.Empty))
-            {
-                try
-                {
-                    queueItem = this.ServerQueueItems.Find(acquiredItem.QueueItemId);
-                    if (null != queueItem)
-                    {
-                        queueItem.Acquire(acquiredItem.AcquiredBy);
-                        this.SaveChanges();
-                    }
-                    else
-                    {
-                        this.WriteAppLogEntry(
-                            "[GetAcquiredQueueItem].[Failure]",
-                            string.Format("Queue Item Not found: [acquiredItem [id: {0}, queueItemId: {1}]", acquiredItem.Id, acquiredItem.QueueItemId));
-                    }
-                }
-                catch (System.Exception ex)
-                {
-                    this.WriteAppLogEntry(
-                        "[GetAcquiredQueueItem].[Failure]",
-                        string.Format("[acquiredItem [id: {0}, queueItemId: {1}]", acquiredItem.Id, acquiredItem.QueueItemId),
-                        ex);
-                    Drp.DrpExceptionHandler.LogException(
-                        string.Format(
-                            "DrpServerQueueDataContext.GetAcquiredQueueItem [acquiredItem [id: {0}, queueItemId: {1}]",
-                            acquiredItem.Id,
-                            acquiredItem.QueueItemId),
-                        ex);
-                    queueItem = null;
-                }
-            }
-            return queueItem;
+            get { return this.ServerQueueEnqueuedItems.AsNoTracking().OrderBy(sqei => sqei.Created); }
         }
 
         /// <summary>
-        /// Tranaction Wrapped Actual Acquire Action.
-        /// 
-        ///   Start Transaction
-        ///     - Add item to Acquired table
-        ///     - Remove item from queue table
-        ///   End Transaction (rollback on failure).
+        /// Ensures that the acquire was actually successful.
         /// </summary>
-        /// <param name="enqueuedItem">The enqueued Item to be acquired</param>
-        /// <param name="acquirerId">The User Defined aquirerId value. Used to filter Dequeueing items</param>
-        /// <returns>The Acquired Item on successfull transaction.Commit() otherwise null</returns>
-        private DrpServerQueueAcquiredItem AttemptAcquire(DrpServerQueueEnqueuedItem enqueuedItem, string acquirerId)
+        /// <param name="queueStateId">Id for the Aquired Table Entry</param>
+        /// <param name="queueItemId">Id of the Queue Item</param>
+        /// <param name="acquirerId">AcquiredBy value if this acquire was actually successful</param>
+        /// <returns>The Queue Item if acquire was actually successful, otherwise null</returns>
+        private IDrpQueueItem EnsureAcquireSucceeded(Guid queueStateId, Guid queueItemId, string acquirerId)
         {
-            DrpServerQueueAcquiredItem acquiredItem = null;
+            IDrpQueueItem queueItem = null;
 
-            if (null != enqueuedItem)
+            // Guid.Empty for the ID means the stored procedure failed so no acquire here.
+            if (false == Guid.Empty.Equals(queueStateId))
             {
-                // Create the acquired item and set the acquired values
-                acquiredItem = new DrpServerQueueAcquiredItem(enqueuedItem);
-                acquiredItem.AcquiredBy = acquirerId;
-                acquiredItem.Acquired = DateTimeOffset.UtcNow;
+                // Retrieved the acquired queue item 
+                queueItem = this.ServerQueueItems.AsNoTracking()
+                    .Where(sqi => sqi.Id == queueItemId && sqi.AcquiredBy.Equals(acquirerId, StringComparison.InvariantCultureIgnoreCase))
+                    .FirstOrDefault();
 
-                // Start the transaction
-                using (DbContextTransaction transaction = this.Database.BeginTransaction())
+                if (null == queueItem)
                 {
+                    // If null was returned from query, then another process actually acquired
+                    // Duplicate Acquire success from stored procedure but this one actually
+                    //      failed despite the transactions in the stored procedure.
+                    // That means there is an acquired state record that needs to be deleted.
                     try
                     {
-                        // One possible optimization is to move this to be a stored procedure created in the database as part of
-                        // the code first rollout. That would place the exception/error handling on the SQL server where the SQL server
-                        // could return null after handling and logging the issue.
-                        // I don't know how much this would improve the queue operations. There would still be a line of consumers trying
-                        // to get that next free item.
-
-                        // If the Remove(enqueuedItem) failed, then the item was acquired prior to this attempt.
-                        this.ServerQueueEnqueuedItems.Remove(enqueuedItem);
-                        this.ServerQueueAcquiredItems.Add(acquiredItem);
-                        this.SaveChanges();
-
-                        transaction.Commit();
-
-                        // Log the success
-                        this.WriteQueueLogEntry(
-                            enqueuedItem.Id,
-                            acquiredItem.Id,
-                            enqueuedItem.QueueItemId,
-                            "[Acquire].[Success]",
-                            string.Format(
-                                "[Acquire: acquireId: {0} queueItemId: {1}]",
-                                acquirerId,
-                                enqueuedItem.QueueItemId.ToStringOuterBraces()));
-                    }
-                    catch (System.Data.Entity.Infrastructure.DbUpdateConcurrencyException)
-                    {
-                        transaction.Rollback();
-                        this.WriteAppLogEntry(
-                            "[Acquire].[ConcurrencyFailure]",
-                            string.Format(
-                                "[RolledBack: acquireId: {0} queueItemId: {1}]",
-                                acquirerId,
-                                enqueuedItem.QueueItemId.ToStringOuterBraces()));
-                        acquiredItem = null;
+                        DrpServerQueueAcquiredItem orphanedAcquire = this.ServerQueueAcquiredItems.Where(sqai => sqai.Id == queueStateId).FirstOrDefault();
+                        if (null != orphanedAcquire)
+                        {
+                            this.ServerQueueAcquiredItems.Remove(orphanedAcquire);
+                            this.WriteAppLogEntry(
+                                "[Acquire].[Failure-Orphaned]",
+                                string.Format(" Deleted Succeeded [@itemId: {0}, Id: {1},  acquiredBy: {2}]",
+                                    queueItemId.ToStringDashes(), queueStateId.ToStringDashes(), acquirerId));
+                            this.SaveChanges();
+                        }
                     }
                     catch (System.Exception ex)
                     {
-                        transaction.Rollback();
                         this.WriteAppLogEntry(
-                            "[Acquire].[Failure]",
-                            string.Format(
-                                "[RolledBack: acquireId: {0} queueItemId: {1}]",
-                                acquirerId,
-                                enqueuedItem.QueueItemId.ToStringOuterBraces()),
+                            "[Acquire].[Failure-Orphaned]",
+                            string.Format(" Deleted Failed [@itemId: {0}, Id: {1},  acquiredBy: {2}]",
+                                queueItemId.ToStringDashes(), queueStateId.ToStringDashes(), acquirerId),
                             ex);
-                        Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Acquire", ex);
-                        acquiredItem = null;
                     }
                 }
             }
-            return acquiredItem;
-        }
 
-        /// <summary>
-        /// Marks a queue item as acquired. An acquired item can only be dequeued by the same acquirerId value.
-        /// Acquire steps:
-        ///   - Retrieve item from the queue table.
-        ///   Start Transaction
-        ///     - Add item to Acquired table
-        ///     - Remove item from queue table
-        ///   End Transaction (rollback on failure).
-        /// </summary>
-        /// <param name="acquirerId">Required - Must match database value - Case Sensitive</param>
-        /// <param name="queueItemId">Id of queue item to release</param>
-        /// <returns>Acquired Item on success, null on failure</returns>
-        private DrpServerQueueAcquiredItem AttemptAcquire(string acquirerId, Guid queueItemId)
-        {
-            DrpServerQueueAcquiredItem acquiredItem = null;
-            DrpServerQueueEnqueuedItem enqueuedItem = null;
-
-            try
-            {
-                // There should only be one item in the Enqueued table but just incase..
-                // TODO: Maintenance item Orphaned QueueItems
-                enqueuedItem = this.ServerQueueEnqueuedItems.OrderBy(sqei => sqei.Created)
-                    .Where(sqei => sqei.QueueItemId.Equals(queueItemId)).FirstOrDefault();
-
-                if (null != enqueuedItem)
-                {
-                    acquiredItem = this.AttemptAcquire(enqueuedItem, acquirerId);
-                }
-            }
-            catch (System.Exception ex)
-            {
-                this.WriteAppLogEntry(
-                    "[Acquire].[Failure]",
-                    string.Format(
-                        "[Initial Select. acquireId: {0} queueItemId: {1}]",
-                        acquirerId,
-                        queueItemId.ToStringOuterBraces()),
-                    ex);
-                Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Acquire", ex);
-                acquiredItem = null;
-            }
-            return acquiredItem;
+            return queueItem;
         }
 
 
-
-        /// <summary>
-        /// Attampts to Mark a queue item as acquired. An acquired item can only be dequeued by the same acquirerId value.
-        /// Acquire steps:
-        ///   - Retrieve item from the queue table.
-        ///   Start Transaction
-        ///     - Add item to Acquired table
-        ///     - Remove item from queue table
-        ///   End Transaction (rollback on failure).
-        /// </summary>
-        /// <param name="acquirerId">Required - Must match database value - Case Sensitive</param>
-        /// <param name="itemType">Queue Item type (category) to attempt acquire. Not used to filter if blank</param>
-        /// <returns>Acquired Item on success, null on failure</returns>
-        private DrpServerQueueAcquiredItem AttemptAcquire(string acquirerId, string itemType)
-        {
-            DrpServerQueueAcquiredItem acquiredItem = null;
-            DrpServerQueueEnqueuedItem enqueuedItem = null;
-
-            try
-            {
-                if (string.IsNullOrWhiteSpace(itemType))
-                {
-                    enqueuedItem = this.ServerQueueEnqueuedItems.OrderBy(sqei => sqei.Created).FirstOrDefault();
-                }
-                else
-                {
-                    enqueuedItem = this.ServerQueueEnqueuedItems.OrderBy(sqei => sqei.Created)
-                        .Where(sqi => sqi.ItemType.Equals(itemType)).FirstOrDefault();
-                }
-
-                if (null != enqueuedItem)
-                {
-                    acquiredItem = this.AttemptAcquire(enqueuedItem, acquirerId);
-                }
-            }
-            catch (System.Exception ex)
-            {
-                this.WriteAppLogEntry(
-                    "[Acquire].[Failure]",
-                    string.Format(
-                        "[Initial Select. acquireId: {0} itemType: {1}]",
-                        acquirerId,
-                        itemType),
-                    ex);
-                Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Acquire", ex);
-                acquiredItem = null;
-            }
-            return acquiredItem;
-        }
-
-        #endregion
+         #endregion
 
         /// <summary>
         /// <summary>
@@ -839,34 +699,82 @@ namespace Drp.SeverQueueData.DAL
         /// <returns>Acquired Item on success, null on failure</returns>
         public IDrpQueueItem Acquire(string acquirerId, string itemType)
         {
-            DrpServerQueueAcquiredItem acquiredItem = null;
             IDrpQueueItem queueItem = null;
-            int acquireAttempts = 0;
-            int maxRetryAttempts = GetAcquireRetryAttempts();
+            Guid queueItemId = Guid.Empty;
+            Guid queueStateId = Guid.Empty;
 
-            if (ValidateAquireId(acquirerId, "Acquire", Guid.Empty))
+            /*
+
+                CREATE PROCEDURE [dbo].[spQueueItemAcquire]
+	                @itemType NVARCHAR(255) = NULL,
+                    @acquiredBy NVARCHAR(255) = NULL,
+	                @retryAttempts INT = 10
+ 
+            */
+
+            using (SqlCommand sqlCommand = new SqlCommand(
+                "exec dbo.spQueueItemAcquire @itemType, @acquiredBy, @retryAttempts"))
             {
-                while (acquireAttempts < maxRetryAttempts && null == acquiredItem)
+
+                sqlCommand.Connection = (SqlConnection)this.Database.Connection;
+                if (sqlCommand.Connection.State != System.Data.ConnectionState.Open)
                 {
-                    acquireAttempts++;
-                    acquiredItem = this.AttemptAcquire(acquirerId, itemType);
+                    sqlCommand.Connection.Open();
                 }
 
-                if (null != acquiredItem)
+                sqlCommand.Parameters.AddWithValue("@itemType", itemType);
+                sqlCommand.Parameters.AddWithValue("@acquiredBy", acquirerId);
+                sqlCommand.Parameters.AddWithValue("@retryAttempts", GetAcquireRetryAttempts());
+
+                try
                 {
-                    queueItem = this.SetQueueItemAcquired(acquiredItem);
+                    // If nothing returned, then Acquire failed
+                    using (SqlDataReader sqlreader = sqlCommand.ExecuteReader())
+                    {
+                        while (sqlreader.Read())
+                        {
+                            queueStateId = (Guid)sqlreader["Id"];
+                            queueItemId = (Guid)sqlreader["QueueItemId"];
+                            // There should only be one but just in case... exit here
+                            break;
+                        }
+
+                        if (sqlreader.Read())
+                        {
+                            this.WriteAppLogEntry(
+                                "[Acquire].[Issue]",
+                                string.Format("sqlReader return more than one row: [@itemType: {0},  @acquiredBy: {1}]", itemType, acquirerId));
+                        }
+                    }
+
                 }
+                catch (System.Exception ex)
+                {
+                    this.WriteAppLogEntry(
+                        "[Acquire].[Failure]",
+                        string.Format("[@itemId: {0},  @aquirerId: {1}]", queueItemId.ToStringDashes(), acquirerId),
+                        ex);
+                    queueItem = null;
+                }
+
+
             }
 
-            if (null == queueItem)
+            // Ensure the Acquire Succeeded
+            queueItem = EnsureAcquireSucceeded(queueStateId, queueItemId, acquirerId);
+
+            if (null != queueItem)
             {
-                this.WriteAppLogEntry(
-                    "[Acquire].[Failure]",
-                     string.Format(
-                        "[Acquire: acquireId: {0} itemType: {1}]",
-                        acquirerId,
-                        itemType));
+                this.WriteQueueLogEntry(
+                    Guid.Empty,
+                    queueStateId,
+                    queueItem.Id,
+                    "[Acquire].[Success]",
+                    string.Format("[Acquire Item [Id: {0} Type: {1}, AcquiredBy: {2}]",
+                        queueItem.Id, queueItem.ItemType, queueItem.AcquiredBy));
+
             }
+
             return queueItem;
         }
 
@@ -884,34 +792,82 @@ namespace Drp.SeverQueueData.DAL
         /// <returns>Acquired Item on success, null on failure</returns>
         public IDrpQueueItem Acquire(string acquirerId, Guid queueItemId)
         {
-            DrpServerQueueAcquiredItem acquiredItem = null;
+            Guid queueStateId = Guid.Empty;
             IDrpQueueItem queueItem = null;
-            int acquireAttempts = 0;
-            int maxRetryAttempts = GetAcquireRetryAttempts();
 
-            if (ValidateAquireId(acquirerId, "Acquire", queueItemId))
+            /*
+
+                CREATE PROCEDURE [dbo].[spQueueItemAcquireSpecific]
+	                @queueItemId UniqueIdentifier = NULL,
+                    @acquiredBy NVARCHAR(255) = NULL
+
+            */
+
+            using (SqlCommand sqlCommand = new SqlCommand(
+                "exec dbo.spQueueItemAcquireSpecific @queueItemId, @acquiredBy"))
             {
-                while (acquireAttempts < maxRetryAttempts && null == acquiredItem)
+
+                sqlCommand.Connection = (SqlConnection)this.Database.Connection;
+                if (sqlCommand.Connection.State != System.Data.ConnectionState.Open)
                 {
-                    acquireAttempts++;
-                    acquiredItem = this.AttemptAcquire(acquirerId, queueItemId);
+                    sqlCommand.Connection.Open();
                 }
 
-                if (null != acquiredItem)
+                sqlCommand.Parameters.AddWithValue("@queueItemId", queueItemId);
+                sqlCommand.Parameters.AddWithValue("@acquiredBy", acquirerId);
+
+                try
                 {
-                    queueItem = this.SetQueueItemAcquired(acquiredItem);
+                    // If nothing returned, then Acquire failed
+                    using (SqlDataReader sqlreader = sqlCommand.ExecuteReader())
+                    {
+                        // Even though the data is not used, read the first row so the next If works
+                        while (sqlreader.Read())
+                        {
+                            queueStateId = (Guid)sqlreader["Id"];
+
+                            queueItem = this.ServerQueueHistoryItems.AsNoTracking()
+                                .Where(sqhi => sqhi.Id == queueItemId).FirstOrDefault();
+
+                            // There should only be one but just in case... exit here
+                            break;
+                        }
+
+                        // If there is more than one row to read, then something is wrong.
+                        // Log the issue but do not stop the queue processing.
+                        if (sqlreader.Read())
+                        {
+                            this.WriteAppLogEntry(
+                                "[Acquire].[Issue]",
+                                string.Format("sqlReader return more than one row: [@itemId: {0},  @acquiredBy: {1}]", queueItemId.ToStringDashes(), acquirerId));
+                        }
+                    }
+
+                }
+                catch (System.Exception ex)
+                {
+                    this.WriteAppLogEntry(
+                        "[Acquire].[Failure]",
+                        string.Format("[@itemId: {0},  @aquirerBy: {1}]", queueItemId.ToStringDashes(), acquirerId),
+                        ex);
+                    queueItem = null;
                 }
             }
 
-            if (null == queueItem)
+            // Ensure the Acquire Succeeded
+            queueItem = EnsureAcquireSucceeded(queueStateId, queueItemId, acquirerId);
+
+            if (null != queueItem)
             {
-                this.WriteAppLogEntry(
-                    "[Acquire].[Failure]",
-                     string.Format(
-                        "[Acquire: acquireId: {0} queueItemId: {1}]",
-                        acquirerId,
-                        queueItemId.ToStringOuterBraces()));
+                this.WriteQueueLogEntry(
+                    Guid.Empty,
+                    queueStateId,
+                    queueItem.Id,
+                    "[Acquire].[Success]",
+                    string.Format("[Acquire Item [Id: {0} Type: {1}, AcquiredBy: {2}]",
+                        queueItem.Id.ToStringDashes(), queueItem.ItemType, queueItem.AcquiredBy));
             }
+
             return queueItem;
         }
 
@@ -924,90 +880,91 @@ namespace Drp.SeverQueueData.DAL
         ///     - Remove State Item from Acquired table
         ///   End Transaction (rollback on failure).
         /// </summary>
-        /// <param name="acquirerId">Required - Must match database value - Case Sensitive</param>
+        /// <param name="acquiredBy">Required - Must match database value - Case Sensitive</param>
         /// <param name="queueItemId">Id of queue item to release</param>
         /// <returns>Released Item on success, null on failure</returns>
-        public IDrpQueueItem Release(string acquirerId, Guid queueItemId)
+        public IDrpQueueItem Release(string acquiredBy, Guid queueItemId)
         {
             DrpServerQueueItem queueItem = null;
-            DrpServerQueueAcquiredItem toRelease = null;
-            DrpServerQueueEnqueuedItem toEnqueue = null;
+            Guid queueStateId = Guid.Empty;
 
-            if (ValidateAquireId(acquirerId, "Release", queueItemId))
+            /*
+
+            CREATE PROCEDURE [dbo].[spQueueItemRelease]
+                @queueItemId UniqueIdentifier,
+                @acquiredBy NVARCHAR(255) = NULL
+
+
+            */
+
+            using (SqlCommand sqlCommand = new SqlCommand(
+                "exec dbo.spQueueItemRelease @queueItemId, @acquiredBy"))
             {
+
+                sqlCommand.Connection = (SqlConnection)this.Database.Connection;
+                if (sqlCommand.Connection.State != System.Data.ConnectionState.Open)
+                {
+                    sqlCommand.Connection.Open();
+                }
+
+                sqlCommand.Parameters.AddWithValue("@queueItemId", queueItemId);
+                sqlCommand.Parameters.AddWithValue("@acquiredBy", acquiredBy);
+
                 try
                 {
-                    toRelease = this.ServerQueueAcquiredItems.Where(
-                        sqi => sqi.QueueItemId.Equals(queueItemId)
-                        && acquirerId.Equals(sqi.AcquiredBy, StringComparison.Ordinal)
-                        ).FirstOrDefault();
-
-                    if (null != toRelease)
+                    // If nothing returned, then Dequeue failed
+                    using (SqlDataReader sqlreader = sqlCommand.ExecuteReader())
                     {
-                        queueItem = this.ServerQueueItems.Find(queueItemId);
+                        // Even though the data is not used, read the first row so the next If works
+                        while (sqlreader.Read())
+                        {
+                            queueStateId = (Guid)sqlreader["Id"];
+                            // There should only be one but just in case... exit here
+                            break;
+                        }
+
+                        // If there is more than one row to read, then something is wrong.
+                        // Log the issue but do not stop the queue processing.
+                        if (sqlreader.Read())
+                        {
+                            this.WriteAppLogEntry(
+                                "[Release].[Issue]",
+                                string.Format("sqlReader return more than one row: [@itemId: {0},  @acquiredBy: {1}]", queueItemId.ToStringDashes(), acquiredBy));
+                        }
                     }
+
                 }
                 catch (System.Exception ex)
                 {
                     this.WriteAppLogEntry(
                         "[Release].[Failure]",
-                        string.Format(
-                            "[Initial Select. acquireId: {0} queueItemId: {1}]",
-                            acquirerId,
-                            queueItemId.ToStringOuterBraces()),
+                        string.Format("[@itemId: {0},  @aquirerId: {1}]", queueItemId.ToStringDashes(), acquiredBy),
                         ex);
-                    Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Release", ex);
-                    toRelease = null;
                     queueItem = null;
                 }
-
-                // If the item to release was found
-                if (null != queueItem)
-                {
-                    using (DbContextTransaction transaction = this.Database.BeginTransaction())
-                    {
-                        try
-                        {
-                            queueItem.Release();
-
-                            // Create a new EnqueuedItem base on the AcquiredItem
-                            toEnqueue = new DrpServerQueueEnqueuedItem(toRelease);
-
-                            // If the add failed, then the item was acquired after the original DrpServerQueryItem was retrieved.
-                            this.ServerQueueEnqueuedItems.Add(toEnqueue);
-                            this.ServerQueueAcquiredItems.Remove(toRelease);
-                            this.SaveChanges();
-                            transaction.Commit();
-
-                            this.WriteQueueLogEntry(
-                                toRelease.Id,
-                                toEnqueue.Id,
-                                queueItemId,
-                                "[Release].[Success]",
-                                string.Format(
-                                    "[Release: acquireId: {0} queueItemId: {1}]",
-                                    acquirerId,
-                                    queueItemId.ToStringOuterBraces()));
-                        }
-                        catch (System.Exception ex)
-                        {
-                            transaction.Rollback();
-                            this.WriteAppLogEntry(
-                                "[Release].[Failure]",
-                                string.Format(
-                                    "[RolledBack: acquireId: {0} queueItemId: {1}]",
-                                    acquirerId,
-                                    queueItemId.ToStringOuterBraces()),
-                                ex);
-                            Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Release", ex);
-                            queueItem = null;
-                        }
-                    }
-                }
             }
+
+            if (false == Guid.Empty.Equals(queueStateId))
+            {
+                queueItem = this.ServerQueueItems.AsNoTracking()
+                    .Where(sqi => sqi.Id == queueItemId).FirstOrDefault();
+
+            }
+
+            if (null != queueItem)
+            {
+                this.WriteQueueLogEntry(
+                    Guid.Empty,
+                    queueStateId,
+                    queueItem.Id,
+                    "[Release].[Success]",
+                    string.Format("[Release Item [Id: {0} Type: {1}, AcquiredBy: {2}]",
+                        queueItem.Id, queueItem.ItemType, queueItem.AcquiredBy));
+
+            }
+
             return queueItem;
         }
-
 
         /// <summary>
         /// Dequeues an Item. The Item must have been previously Acquired.
@@ -1023,80 +980,80 @@ namespace Drp.SeverQueueData.DAL
         /// <returns>Dequeued Item on success, null on failure</returns>
         public IDrpQueueItem Dequeue(string acquirerId, Guid queueItemId)
         {
-            DrpServerQueueItem queueItem = null;
-            DrpServerQueueHistoryItem historyItem = null;
-            DrpServerQueueDequeuedItem dequeuedItem = null;
-            DrpServerQueueAcquiredItem acquiredItem = null;
+            DrpServerQueueHistoryItem queueItem = null;
+            Guid queueStateId = Guid.Empty;
 
-            if (ValidateAquireId(acquirerId, "Dequeue", queueItemId))
+            /*
+
+            CREATE PROCEDURE [dbo].[spQueueItemDequeue]
+                @queueItemId UniqueIdentifier,
+                @acquiredBy NVARCHAR(255) = NULL
+
+            */
+
+            using (SqlCommand sqlCommand = new SqlCommand(
+                "exec dbo.spQueueItemDequeue @queueItemId, @acquiredBy"))
             {
+
+                sqlCommand.Connection = (SqlConnection)this.Database.Connection;
+                if (sqlCommand.Connection.State != System.Data.ConnectionState.Open)
+                {
+                    sqlCommand.Connection.Open();
+                }
+
+                sqlCommand.Parameters.AddWithValue("@queueItemId", queueItemId);
+                sqlCommand.Parameters.AddWithValue("@acquiredBy", acquirerId);
+
                 try
                 {
-                    acquiredItem = this.ServerQueueAcquiredItems.Where(
-                        sqi => sqi.QueueItemId.Equals(queueItemId)
-                        && acquirerId.Equals(sqi.AcquiredBy, StringComparison.Ordinal)
-                        ).FirstOrDefault();
-
-                    if(null != acquiredItem)
+                    // If nothing returned, then Dequeue failed
+                    using (SqlDataReader sqlreader = sqlCommand.ExecuteReader())
                     {
-                        queueItem = this.ServerQueueItems.Find(queueItemId);
+                        // Even though the data is not used, read the first row so the next If works
+                        while (sqlreader.Read())
+                        {
+                            queueStateId = (Guid)sqlreader["Id"];
+                            // There should only be one but just in case... exit here
+                            break;
+                        }
+
+                        // If there is more than one row to read, then something is wrong.
+                        // Log the issue but do not stop the queue processing.
+                        if (sqlreader.Read())
+                        {
+                            this.WriteAppLogEntry(
+                                "[Dequeue].[Issue]",
+                                string.Format("sqlReader return more than one row: [@itemId: {0},  @acquiredBy: {1}]", queueItemId.ToStringDashes(), acquirerId));
+                        }
                     }
+
                 }
                 catch (System.Exception ex)
                 {
                     this.WriteAppLogEntry(
                         "[Dequeue].[Failure]",
-                        string.Format(
-                            "[Initial Select. acquireId: {0} queueItemId: {1}]",
-                            acquirerId,
-                            queueItemId.ToStringOuterBraces()),
+                        string.Format("[@itemId: {0},  @aquirerBy: {1}]", queueItemId.ToStringDashes(), acquirerId),
                         ex);
-                    Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Dequeue", ex);
-                    acquiredItem = null;
                     queueItem = null;
                 }
+            }
 
-                // If the item to Dequeue was found
-                if (null != queueItem)
-                {
-                    using (DbContextTransaction transaction = this.Database.BeginTransaction())
-                    {
-                        try
-                        {
-                            dequeuedItem = new DrpServerQueueDequeuedItem(acquiredItem);
-                            historyItem = new DrpServerQueueHistoryItem(queueItem);
-                            // If the add failed, then the item was acquired after the original DrpServerQueryItem was retrieved.
-                            this.ServerQueueDequeuedItems.Add(dequeuedItem);
-                            this.ServerQueueAcquiredItems.Remove(acquiredItem);
-                            this.ServerQueueHistoryItems.Add(historyItem);
-                            this.ServerQueueItems.Remove(queueItem);
-                            this.SaveChanges();
-                            transaction.Commit();
-                            this.WriteQueueLogEntry(
-                                acquiredItem.Id,
-                                dequeuedItem.Id,
-                                queueItemId,
-                                "[Dequeue].[Success]",
-                                string.Format(
-                                    "[Dequeue: acquireId: {0} queueItemId: {1}]",
-                                    acquirerId,
-                                    queueItemId.ToStringOuterBraces()));
-                        }
-                        catch (System.Exception ex)
-                        {
-                            transaction.Rollback();
-                            this.WriteAppLogEntry(
-                                "[Dequeue].[Failure]",
-                                string.Format(
-                                    "[RolledBack: acquireId: {0} queueItemId: {1}]",
-                                    acquirerId,
-                                    queueItemId.ToStringOuterBraces()),
-                                ex);
-                            Drp.DrpExceptionHandler.LogException("DrpServerQueueDataContext.Dequeue", ex);
-                            queueItem = null;
-                        }
-                    }
-                }
+            if (false == Guid.Empty.Equals(queueStateId))
+            {
+                queueItem = this.ServerQueueHistoryItems.AsNoTracking()
+                    .Where(sqhi => sqhi.Id == queueItemId).FirstOrDefault();
+            }
+
+            if (null != queueItem)
+            {
+                this.WriteQueueLogEntry(
+                    Guid.Empty,
+                    queueStateId,
+                    queueItem.Id,
+                    "[Dequeue].[Success]",
+                    string.Format("[Dequeue Item [Id: {0} Type: {1}, AcquiredBy: {2}]",
+                        queueItem.Id.ToStringDashes(), queueItem.ItemType, queueItem.AcquiredBy));
+
             }
 
             return queueItem;
@@ -1129,12 +1086,12 @@ namespace Drp.SeverQueueData.DAL
                     if (string.IsNullOrWhiteSpace(itemType))
                     {
                         // All Type Values
-                        ret = this.ServerQueueAcquiredItems.Select(sqi => sqi.QueueItemId).ToList();
+                        ret = this.ServerQueueAcquiredItems.AsNoTracking().Select(sqi => sqi.QueueItemId).ToList();
                     }
                     else
                     {
                         // Specific type values
-                        ret = this.ServerQueueAcquiredItems.Where(
+                        ret = this.ServerQueueAcquiredItems.AsNoTracking().Where(
                             sqi => itemType.Equals(sqi.ItemType, StringComparison.InvariantCultureIgnoreCase))
                             .Select(sqi => sqi.QueueItemId).ToList();
                     }
@@ -1147,13 +1104,13 @@ namespace Drp.SeverQueueData.DAL
                     if (string.IsNullOrWhiteSpace(itemType))
                     {
                         // All ItemType values
-                        ret = this.ServerQueueAcquiredItems.Where(sqi => sqi.Acquired >= testDateTime)
+                        ret = this.ServerQueueAcquiredItems.AsNoTracking().Where(sqi => sqi.Acquired >= testDateTime)
                             .Select(sqi => sqi.QueueItemId).ToList();
                     }
                     else
                     {
                         // Specific ItemType value
-                        ret = this.ServerQueueAcquiredItems.Where(
+                        ret = this.ServerQueueAcquiredItems.AsNoTracking().Where(
                             sqi => sqi.Acquired >= testDateTime
                             && itemType.Equals(sqi.ItemType, StringComparison.InvariantCultureIgnoreCase))
                             .Select(sqi => sqi.QueueItemId).ToList();
@@ -1183,7 +1140,7 @@ namespace Drp.SeverQueueData.DAL
         /// </summary>
         /// <param name="queueItemId">Id of item to move back to the queue</param>
         /// <returns>IDrpQueryItem of the requeued item</returns>
-        public IDrpQueueItem RequeueAquiredItem(Guid queueItemId)
+        public IDrpQueueItem RequeueAcquiredItem(Guid queueItemId)
         {
             string acquirerId = string.Empty;
             DrpServerQueueItem queueItem = null;
@@ -1192,7 +1149,7 @@ namespace Drp.SeverQueueData.DAL
 
             try
             {
-                toRelease = this.ServerQueueAcquiredItems.Where(
+                toRelease = this.ServerQueueAcquiredItems.AsNoTracking().Where(
                     sqi => sqi.QueueItemId.Equals(queueItemId)).FirstOrDefault();
 
                 if (null != toRelease)
@@ -1281,7 +1238,7 @@ namespace Drp.SeverQueueData.DAL
                 foreach (Guid queueitemId in this.GetStaleServerQueueAcquiredItems(itemType, staleTimePeriod))
                 {
                     counterAll++;
-                    if (null != this.RequeueAquiredItem(queueitemId))
+                    if (null != this.RequeueAcquiredItem(queueitemId))
                     {
                         countSuccess++;
                     }
@@ -1329,13 +1286,13 @@ namespace Drp.SeverQueueData.DAL
                 if (string.IsNullOrWhiteSpace(itemType))
                 {
                     // All ItemType values
-                    ret = this.ServerQueueEnqueuedItems.Where(sqi => sqi.Created >= testDateTime)
+                    ret = this.ServerQueueEnqueuedItems.AsNoTracking().Where(sqi => sqi.Created >= testDateTime)
                         .Select(sqi => sqi.QueueItemId).ToList();
                 }
                 else
                 {
                     // Specific ItemType value
-                    ret = this.ServerQueueEnqueuedItems.Where(
+                    ret = this.ServerQueueEnqueuedItems.AsNoTracking().Where(
                         sqi => sqi.Created >= testDateTime
                         && itemType.Equals(sqi.ItemType, StringComparison.InvariantCultureIgnoreCase))
                         .Select(sqi => sqi.QueueItemId).ToList();

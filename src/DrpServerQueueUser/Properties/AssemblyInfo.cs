@@ -6,11 +6,11 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("DrpServerQueueUser")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("DrpServerQueue Testing Tool")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Peoplutions")]
 [assembly: AssemblyProduct("DrpServerQueueUser")]
-[assembly: AssemblyCopyright("Copyright ©  2016")]
+[assembly: AssemblyCopyright("Copyright ©  2016 Daniel Ricker III and Peoplutions")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

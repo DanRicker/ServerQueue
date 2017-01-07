@@ -1,8 +1,8 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
-namespace Drp.SeverQueueData.Models
+namespace Drp.ServerQueueData.Models
 {
     #region Using Statements
 
@@ -45,7 +45,6 @@ namespace Drp.SeverQueueData.Models
             this.ItemMetadata = serverQueueItem.ItemMetadata;
             this.Acquired = serverQueueItem.Acquired;
             this.AcquiredBy = serverQueueItem.AcquiredBy;
-            this.StaleAcquireCount = serverQueueItem.StaleAcquireCount;
             this.Created = serverQueueItem.Created;
         }
 

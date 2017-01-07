@@ -9,7 +9,7 @@ namespace Drp
     /// <summary>
     /// Server Queue Administrative Methods and Properties
     /// </summary>
-    public interface IServerQueueAdministation : IServerQueue
+    public interface IServerQueueAdministation : IServerQueue, IServerQueueState
     {
 
         /// <summary>

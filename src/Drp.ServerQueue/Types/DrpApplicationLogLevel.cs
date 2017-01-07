@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 
     This file contains both the enumeration definition and extension methods for the defined enumeration
 

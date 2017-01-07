@@ -36,7 +36,7 @@ namespace DrpServerQueueUser.Actions
 
         protected async void ContinuouslyExecuteAction(ActionBase action)
         {
-            IServerQueue serverQueue = new ServerQueue();
+            IServerQueue serverQueue = new ServerQueue(Properties.Settings.Default.DefaultConnectionString);
 
             while (true)
             {

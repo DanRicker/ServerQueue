@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-using Drp.SeverQueueData;
+using Drp.ServerQueueData;
 using Drp.Types;
 using Drp;
 
@@ -14,12 +14,11 @@ namespace DrpServerQueueUser
 {
     class Program
     {
-        private static bool _doThese = true;
-
 
         private static ActionGroupType EnsureActionGroupType(string[] args)
         {
-            ActionGroupType ret = ActionGroupType.AcquireDequeueAny;
+            ActionGroupType ret = ActionGroupType.EnqueueAtoBtoCtoDtoEtoFtoDequeue;
+            // ActionGroupType ret = ActionGroupType.EnqueueABCDEF;
             if (args.Length == 1 && false == string.IsNullOrWhiteSpace(args[0]))
             {
                 string argString = args[0].Substring(0, 1).ToUpper();
@@ -93,13 +92,73 @@ namespace DrpServerQueueUser
 
         static void Main(string[] args)
         {
+            //RunEnqueue();
+            RunActionGroup(args);
+            //RunAcquireDequeue("AAAAA");
+            //RunActionGroup(ActionGroupType.EnqueueABCDEF);
+
+        }
+
+
+        private static void RunActionGroup(string[] args)
+        {
 
             ActionGroupType actionGroupType = EnsureActionGroupType(args);
+            RunActionGroup(actionGroupType);
+        }
 
+
+        private static void RunActionGroup(ActionGroupType actionGroupType)
+        {
             ActionGroup actionGroup = ActionGroup.GetActionGroup(actionGroupType);
             DateTimeOffset start = DateTimeOffset.UtcNow;
             actionGroup.ContinouelyExecuteActions();
+            Console.WriteLine(string.Format("Drp Process Instance ID: {0}", DrpDebugging.DrpProcessInstanceId));
             Console.WriteLine("Executing Action Group: {0}", actionGroupType.ToString());
+            Console.Write("Press any key to quit: ");
+            ConsoleKeyInfo keyInfo = Console.ReadKey();
+            Console.WriteLine();
+            Console.WriteLine("Executed Time: {0}", (DateTimeOffset.UtcNow - start).ToString(@"'['ddd'].['hh\:mm\:ss']'"));
+            string temp = keyInfo.Key.ToString();
+        }
+
+
+        private static void RunEnqueue(string itemType = "AAAAA")
+        {
+            ActionBase testAction = new ActionEnqueue("Enqueue AAAAA")
+            {
+                ItemType = itemType
+            };
+
+            ActionGroup actionGroup = new ActionGroup() { Actions = new List<ActionBase>(new ActionBase[] { testAction }) };
+            actionGroup.ContinouelyExecuteActions();
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+            
+            Console.WriteLine(string.Format("Drp Process Instance ID: {0}", DrpDebugging.DrpProcessInstanceId));
+            Console.WriteLine("Executing Action Enequeue {0}", itemType);
+            Console.Write("Press any key to quit: ");
+            ConsoleKeyInfo keyInfo = Console.ReadKey();
+            Console.WriteLine();
+            Console.WriteLine("Executed Time: {0}", (DateTimeOffset.UtcNow - start).ToString(@"'['ddd'].['hh\:mm\:ss']'"));
+            string temp = keyInfo.Key.ToString();
+        }
+
+
+        private static void RunAcquireDequeue(string itemType = "AAAAA")
+        {
+            ActionBase testAction = new ActionAcquireDequeue("TestAcquireDequeue")
+            {
+                ItemType = itemType,
+            };
+            // IServerQueue serverQueue = new ServerQueue(Properties.Settings.Default.DefaultConnectionString);
+            // IDrpQueueItem queueItem = serverQueue.Acquire("TestAcquire", "AAAAA");
+
+            ActionGroup actionGroup = new ActionGroup() { Actions = new List<ActionBase>(new ActionBase[] { testAction }) };
+            actionGroup.ContinouelyExecuteActions();
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+
+            Console.WriteLine(string.Format("Drp Process Instance ID: {0}", DrpDebugging.DrpProcessInstanceId));
+            Console.WriteLine("Executing Action Acquire Dequeue {0}", itemType);
             Console.Write("Press any key to quit: ");
             ConsoleKeyInfo keyInfo = Console.ReadKey();
             Console.WriteLine();

@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
 namespace Drp
@@ -9,7 +9,7 @@ namespace Drp
     using System;
 
     using Drp.Types;
-    using Drp.SeverQueueData.DAL;
+    using Drp.ServerQueueData.DAL;
 
     #endregion
 
@@ -21,7 +21,7 @@ namespace Drp
     ///    -- WorkFlowA-Output -> Enqueues(workItem)
     ///    -- WorkFlowB-Input -> Aquires(workItem)
     ///    -- WorkFlowB does work.
-    ///    -- WorkFlowB -> Dequeues(workItem)
+    ///    -- WorkFlowB -> Dequeues(workItem) or Enqueue(workItem) for next WorkFlowC
     /// 
     /// The queue is agnostic to the queue item contents.
     /// </summary>
@@ -29,27 +29,6 @@ namespace Drp
     {
 
         private ServerQueueDataContext serverQueueContext = null;
-
-        /// <summary>
-        /// ServerQueueDataContext instance.DO NOT USE DIRECTLY
-        /// - Call GetDbContext() which ensures the context is connected.
-        /// </summary>
-        //private DrpServerQueueDataContext serverQueueDataContext = null;
-
-        /// <summary>
-        /// Get the current connection string.
-        /// If no connection string has been set, then get the default from settings
-        /// </summary>
-        /// <returns>Connection string for the queue database</returns>
-        //private string GetConnnectionString()
-        //{
-        //    string ret = this.ConnectionString;
-        //    if (string.IsNullOrWhiteSpace(ret))
-        //    {
-        //        ret = Properties.Settings.Default.DefaultConnectionString;
-        //    }
-        //    return ret;
-        //}
 
         /// <summary>
         /// Get the current instance of the database context
@@ -64,54 +43,9 @@ namespace Drp
         /// Constructor
         /// </summary>
         /// <param name="connectionString">optional connection string</param>
-        public ServerQueue(string connectionString = null)
+        public ServerQueue(string connectionString)
         {
             serverQueueContext = new ServerQueueDataContext(connectionString);
-        }
-
-        /// <summary>
-        /// Count of Active items in the queue (Enqueued and Acquired)
-        /// </summary>
-        public int QueueCount {  get { return this.GetDbContext().QueueCount; } }
-
-        /// <summary>
-        /// Count of Enqueued items
-        /// </summary>
-        public int EnqueuedCount {  get { return this.GetDbContext().EnqueuedCount; } }
-
-        /// <summary>
-        /// Count of Acquired items
-        /// </summary>
-        public int AcquiredCount { get { return this.GetDbContext().AcquiredCount; } }
-
-        /// <summary>
-        /// Count of active items (enqueued and acquired) in the queue of itemType
-        /// </summary>
-        /// <param name="itemType">Filter value for count</param>
-        /// <returns>Count of items</returns>
-        public int QueueCountOfItemType(string itemType)
-        {
-            return this.GetDbContext().QueueCountOfItemType(itemType);
-        }
-
-        /// <summary>
-        /// Count of Enqueued items of itemType
-        /// </summary>
-        /// <param name="itemType">Filter value for count</param>
-        /// <returns>Count of items</returns>
-        public int EnqueuedCountOfItemType(string itemType)
-        {
-            return this.GetDbContext().EnqueuedCountOfItemType(itemType);
-        }
-
-        /// <summary>
-        /// Count of Acquired Items of itemType
-        /// </summary>
-        /// <param name="itemType">Filter value for count</param>
-        /// <returns>Count of items</returns>
-        public int AcquiredCountOfItemType(string itemType)
-        {
-            return this.GetDbContext().AcquiredCountOfItemType(itemType);
         }
 
         /// <summary>

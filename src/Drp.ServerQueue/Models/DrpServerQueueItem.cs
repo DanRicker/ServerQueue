@@ -1,8 +1,8 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
-namespace Drp.SeverQueueData.Models
+namespace Drp.ServerQueueData.Models
 {
     #region Using Statements
 
@@ -28,7 +28,6 @@ namespace Drp.SeverQueueData.Models
         public DrpServerQueueItem() { }
 
         /// <summary>
-        /// ALWAYS USE THIS CONSTRUCTOR
         /// Create a new server queue item
         /// </summary>
         /// <param name="itemType">User Defined String</param>

@@ -1,8 +1,8 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
-namespace Drp.SeverQueueData.Models
+namespace Drp.ServerQueueData.Models
 {
     #region Using Statements
 
@@ -24,7 +24,6 @@ namespace Drp.SeverQueueData.Models
     public class DrpServerQueueAcquiredItem : DrpServerQueueStateEntry, IDrpServerQueueStateEntry
     {
 
-
         /// <summary>
         /// Default empty constructor required by entity framework
         /// </summary>
@@ -42,9 +41,21 @@ namespace Drp.SeverQueueData.Models
             this.ItemType = serverQueueItem.ItemType;
         }
 
+        /// <summary>
+        /// QueueStateEntry Id
+        /// </summary>
         [Key]
         public Guid Id { get; set; }
+
+        /// <summary>
+        /// DateTimeOffset QueueItem was aquired
+        /// </summary>
         public DateTimeOffset Acquired { get; set; }
+
+        /// <summary>
+        /// AquiredBy identifier. Must match when Dequeueing
+        /// </summary>
+        [MaxLength(DrpServerQueueItemData.AquiredByMaxSize)]
         public string AcquiredBy { get; set; }
 
     }

@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
 namespace Drp.Types
@@ -23,6 +23,5 @@ namespace Drp.Types
         DateTimeOffset? Acquired { get; }
         string ItemData { get; }
         string ItemMetadata { get; }
-        int StaleAcquireCount { get; }
     }
 }

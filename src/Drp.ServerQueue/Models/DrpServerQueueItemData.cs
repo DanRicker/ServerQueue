@@ -1,8 +1,8 @@
 ﻿/*
-    Copyright 2016 Peoplutions
+    Copyright 2016 Daniel Ricker III and Peoplutions
 */
 
-namespace Drp.SeverQueueData.Models
+namespace Drp.ServerQueueData.Models
 {
     #region Using Statements
 
@@ -27,8 +27,9 @@ namespace Drp.SeverQueueData.Models
     public class DrpServerQueueItemData
     {
 
-        public const int QueueItemTypeMaxSize = 127;
-        public const int QueueItemIdMaxSize = 127;
+        public const int QueueItemTypeMaxSize = 255;
+        public const int QueueItemIdMaxSize = 255;
+        public const int AquiredByMaxSize = 255;
 
         /// <summary>
         /// Ensure string values are not greater than max length. Truncate if required.
@@ -79,18 +80,13 @@ namespace Drp.SeverQueueData.Models
         /// <summary>
         /// Who/What acquired (took ownership of) this queue item
         /// </summary>
+        [MaxLength(AquiredByMaxSize)]
         public string AcquiredBy { get; set; }
 
         /// <summary>
         /// Date and Time that this queue item was acquired
         /// </summary>
         public DateTimeOffset? Acquired { get; set; }
-
-        /// <summary>
-        /// Count of times this queue item has been moved from acquired to queue
-        ///     due to staleness (too long with no action)
-        /// </summary>
-        public int StaleAcquireCount { get; set; }
 
         /// <summary>
         /// Acquire Convenience method.
@@ -105,6 +101,9 @@ namespace Drp.SeverQueueData.Models
             this.Acquired = DateTimeOffset.UtcNow;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         internal void Release()
         {
             this.AcquiredBy = null;
